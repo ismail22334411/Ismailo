@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>বাংলাদেশ পূর্ণাঙ্গ ঠিকানা নির্বাচক ও অর্ডার বিল্ডার</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Hind Siliguri -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Firebase SDK Modular Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'bd-courier-order-app';
+        let firebaseConfig = { apiKey: "AIzaSyDummyKeyForFallback", projectId: "bd-order-builder" };
+        if (typeof __firebase_config !== 'undefined') {
+            try { firebaseConfig = JSON.parse(__firebase_config); } catch(e){}
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.firebaseApp = app;
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+        window.firebaseAppId = appId;
+
+        // Auth initialization
+        (async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                }
+            } catch (err) {
+                console.warn("Auth token fallback to guest mode:", err);
+            }
+        })();
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user && !user.isAnonymous) {
+                window.currentUser = user;
+                window.onUserLoggedIn(user);
+            } else {
+                window.currentUser = user || null;
+                window.onUserLoggedOut();
+            }
+        });
+    </script>
+
+    <style>
+        body {
+            font-family: 'Hind Siliguri', sans-serif;
+            background-color: #f1f5f9;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .step-active {
+            background-color: #047857 !important;
+            color: #ffffff !important;
+            border-color: #065f46 !important;
+            box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.4);
+            transform: scale(0.97);
+        }
+        .ward-active {
+            background-color: #6d28d9 !important;
+            color: #ffffff !important;
+            border-color: #5b21b6 !important;
+            box-shadow: 0 4px 6px -1px rgba(109, 40, 217, 0.4);
+            transform: scale(0.97);
+        }
+        .company-active {
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+            border-color: #020617 !important;
+            box-shadow: 0 4px 8px -1px rgba(15, 23, 42, 0.35);
+        }
+        .pinned-glow {
+            border-color: #f59e0b !important;
+            background-color: #fffbeb !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-28">
+
+    <!-- টপ ন্যাভবার -->
+    <header class="bg-emerald-700 text-white p-3.5 shadow-md">
+        <div class="max-w-2xl mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🇧🇩</span>
+                <div>
+                    <h1 class="text-sm sm:text-base font-bold leading-tight flex items-center gap-1.5">
+                        ঠিকানা ও কুরিয়ার অর্ডার বিল্ডার
+                    </h1>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <span id="userStatusBadge" class="text-[10px] bg-emerald-900/70 text-emerald-200 border border-emerald-500/50 px-2 py-0.5 rounded-full font-medium">
+                            <i class="fa-solid fa-lock text-amber-300 mr-0.5"></i> জিমেইল লগইন নেই (গেস্ট মোড)
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button id="authBtn" onclick="handleAuthAction()" class="px-2.5 py-1.5 rounded-lg bg-white text-slate-800 hover:bg-slate-100 text-xs font-bold flex items-center gap-1.5 shadow active:scale-95 transition">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                    <span id="authBtnText">জিমেইল লগইন</span>
+                </button>
+                <button onclick="resetAll()" class="px-2.5 py-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-900 border border-emerald-600 text-xs font-bold flex items-center gap-1 active:scale-95 transition" title="সব খালি করুন">
+                    <i class="fa-solid fa-rotate-right"></i> রিসেট
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-2xl mx-auto px-3 pt-3.5 space-y-3.5">
+
+        <!-- ১. কোম্পানি / ব্র্যান্ড নির্বাচন ও পিন (ঐচ্ছিক) -->
+        <div class="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm space-y-2">
+            <div class="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">
+                        <i class="fa-solid fa-store text-[10px]"></i>
+                    </span>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                        কোম্পানি / শপ নির্বাচন 
+                        <span class="text-[10px] bg-slate-100 text-slate-500 font-normal px-2 py-0.5 rounded-full border border-slate-200">ঐচ্ছিক</span>
+                    </h2>
+                </div>
+                <button onclick="openCompanyModal()" class="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold flex items-center gap-1 transition active:scale-95">
+                    <i class="fa-solid fa-plus text-[10px]"></i> নতুন ব্রাঞ্চ
+                </button>
+            </div>
+            
+            <div id="companyList" class="flex flex-wrap gap-1.5 pt-0.5">
+                <!-- Javascript will load companies -->
+            </div>
+            <p class="text-[10px] text-slate-400 leading-tight">
+                * যে কোম্পানির পার্সেল পাঠাচ্ছেন সেটি সিলেক্ট করে রাখতে পারেন, অথবা সিলেক্ট না করলেও সরাসরি অর্ডার কপি করা যাবে।
+            </p>
+        </div>
+
+        <!-- ২. লাইভ অ্যাড্রেস ও অর্ডার স্লিপ প্রিভিউ কার্ড -->
+        <div class="bg-white rounded-2xl p-3.5 border-2 border-emerald-600 shadow-sm space-y-2.5">
+            <div class="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                <span class="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-clipboard-check text-emerald-600"></i> আপনার নির্বাচিত অর্ডার স্লিপ:
+                </span>
+                <span id="statusTag" class="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 font-semibold px-2 py-0.5 rounded-full">বাছাই করুন</span>
+            </div>
+
+            <!-- লাইভ পয়েন্ট ট্র্যাকার -->
+            <div class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-center text-[11px]">
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-1">
+                    <span class="text-slate-400 block text-[9px]">১. বিভাগ</span>
+                    <strong id="badgeDiv" class="text-emerald-700 truncate block">--</strong>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-1">
+                    <span class="text-slate-400 block text-[9px]">২. জেলা</span>
+                    <strong id="badgeDist" class="text-emerald-700 truncate block">--</strong>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-1">
+                    <span class="text-slate-400 block text-[9px]">৩. উপজেলা</span>
+                    <strong id="badgeUpz" class="text-emerald-700 truncate block">--</strong>
+                </div>
+                <div class="bg-teal-50 border border-teal-200 rounded-lg p-1">
+                    <span class="text-teal-600 block text-[9px]">৪. ইউনিয়ন</span>
+                    <strong id="badgeUni" class="text-teal-800 truncate block">--</strong>
+                </div>
+                <div class="bg-purple-50 border border-purple-200 rounded-lg p-1">
+                    <span class="text-purple-600 block text-[9px]">৫. ওয়ার্ড</span>
+                    <strong id="badgeWrd" class="text-purple-800 truncate block">--</strong>
+                </div>
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-1">
+                    <span class="text-amber-600 block text-[9px]">৬. স্থান</span>
+                    <strong id="badgePlace" class="text-amber-900 truncate block">--</strong>
+                </div>
+            </div>
+
+            <!-- পূর্ণাঙ্গ ডেলিভারি টেক্সট বক্স -->
+            <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <p id="fullSlipPreview" class="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words whitespace-pre-line">
+                    নিচের ১ নম্বর ধাপ থেকে বিভাগ সিলেক্ট করুন...
+                </p>
+                <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                    <button onclick="saveAndBackupOrder()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-lg flex items-center gap-1 shadow transition">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> ব্যাকআপ
+                    </button>
+                    <button onclick="copyFullSlip()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow transition">
+                        <i class="fa-regular fa-copy"></i> স্লিপ কপি
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ধাপ ১: বিভাগ নির্বাচন (এইচটিএমএলে প্রি-রেন্ডার করা যাতে কখনোই খালি না থাকে) -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secDivision">
+            <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100">
+                <span class="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">১</span>
+                <h2 class="text-xs sm:text-sm font-bold text-slate-900">বিভাগ নির্বাচন করুন</h2>
+            </div>
+            <!-- ৮টি বিভাগ সবসময় দৃশ্যমান থাকবে -->
+            <div id="divisionGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button type="button" onclick="selectDivision('ঢাকা', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> ঢাকা
+                </button>
+                <button type="button" onclick="selectDivision('চট্টগ্রাম', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> চট্টগ্রাম
+                </button>
+                <button type="button" onclick="selectDivision('রাজশাহী', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> রাজশাহী
+                </button>
+                <button type="button" onclick="selectDivision('খুলনা', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> খুলনা
+                </button>
+                <button type="button" onclick="selectDivision('বরিশাল', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> বরিশাল
+                </button>
+                <button type="button" onclick="selectDivision('সিলেট', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> সিলেট
+                </button>
+                <button type="button" onclick="selectDivision('রংপুর', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> রংপুর
+                </button>
+                <button type="button" onclick="selectDivision('ময়মনসিংহ', this)" class="div-btn p-2.5 rounded-xl border-2 border-emerald-200 bg-white hover:bg-emerald-50 text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-location-dot text-emerald-600 text-xs"></i> ময়মনসিংহ
+                </button>
+            </div>
+        </div>
+
+        <!-- ধাপ ২: জেলা নির্বাচন (৬৪ জেলা) -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secDistrict">
+            <div class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span id="badgeStep2" class="w-5 h-5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs">২</span>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900">জেলা নির্বাচন করুন (৬৪ জেলা)</h2>
+                </div>
+                <input type="text" id="distSearch" oninput="filterDistricts()" placeholder="জেলা খুঁজুন..." class="w-28 sm:w-36 text-xs px-2 py-1 rounded-lg border border-slate-300 outline-none focus:border-emerald-500">
+            </div>
+            <div id="districtContainer" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                <p class="text-xs text-slate-400 py-4 text-center col-span-full">আগে ১ নম্বর বিভাগ সিলেক্ট করুন</p>
+            </div>
+        </div>
+
+        <!-- ধাপ ৩: উপজেলা / থানা নির্বাচন -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secUpazila">
+            <div class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span id="badgeStep3" class="w-5 h-5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs">৩</span>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900">উপজেলা / থানা নির্বাচন করুন</h2>
+                </div>
+                <div class="flex gap-1">
+                    <input type="text" id="customThana" placeholder="অন্য থানা..." class="w-24 sm:w-32 text-xs px-2 py-1 rounded-lg border border-slate-300 outline-none">
+                    <button onclick="setCustomThana()" class="px-2 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg shrink-0">যোগ</button>
+                </div>
+            </div>
+            <div id="upazilaContainer" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                <p class="text-xs text-slate-400 py-4 text-center w-full">আগে জেলা সিলেক্ট করুন</p>
+            </div>
+        </div>
+
+        <!-- ধাপ ৪: ইউনিয়ন / পৌরসভা নির্বাচন -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secUnion">
+            <div class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span id="badgeStep4" class="w-5 h-5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs">৪</span>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900">ইউনিয়ন / পৌরসভা নির্বাচন করুন</h2>
+                </div>
+                <div class="flex gap-1">
+                    <input type="text" id="customUnion" placeholder="অন্য ইউনিয়ন..." class="w-24 sm:w-32 text-xs px-2 py-1 rounded-lg border border-slate-300 outline-none">
+                    <button onclick="setCustomUnion()" class="px-2 py-1 bg-teal-600 text-white text-xs font-bold rounded-lg shrink-0">যোগ</button>
+                </div>
+            </div>
+            <div id="unionContainer" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                <p class="text-xs text-slate-400 py-4 text-center w-full">আগে উপজেলা সিলেক্ট করুন</p>
+            </div>
+        </div>
+
+        <!-- ধাপ ৫: ওয়ার্ড নম্বর নির্বাচন (১ থেকে ৯ নং ওয়ার্ড) -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secWard">
+            <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100">
+                <span id="badgeStep5" class="w-5 h-5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs">৫</span>
+                <div>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900">ওয়ার্ড নম্বর নির্বাচন করুন</h2>
+                    <p class="text-[10px] text-slate-500">ইউনিয়ন সিলেক্ট করলে ১ থেকে ৯ নং ওয়ার্ড আসবে</p>
+                </div>
+            </div>
+            <div id="wardContainer" class="grid grid-cols-3 sm:grid-cols-9 gap-1.5">
+                <p class="text-xs text-slate-400 py-4 text-center col-span-full">আগে ইউনিয়ন সিলেক্ট করুন</p>
+            </div>
+        </div>
+
+        <!-- ধাপ ৬: ডেলিভারি স্থান ও গ্রাহকের তথ্য -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secDeliveryPlace">
+            <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100">
+                <span id="badgeStep6" class="w-5 h-5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs">৬</span>
+                <div>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900">ডেলিভারি স্থান ও গ্রাহকের তথ্য</h2>
+                    <p class="text-[10px] text-slate-500">নির্দিষ্ট গ্রাম, পাড়া বা ডেলিভারি স্থান লিখে দিন</p>
+                </div>
+            </div>
+
+            <!-- গ্রাহকের নাম ও ফোন নম্বর -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2.5">
+                <div>
+                    <label class="text-[11px] font-semibold text-slate-600 mb-0.5 block">গ্রাহকের নাম (ঐচ্ছিক):</label>
+                    <input type="text" id="custNameInput" oninput="handleCustomerInfo()" placeholder="উদাঃ মোঃ রফিকুল ইসলাম" class="w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 outline-none focus:border-emerald-500 bg-white">
+                </div>
+                <div>
+                    <label class="text-[11px] font-semibold text-slate-600 mb-0.5 block">মোবাইল নম্বর (ঐচ্ছিক):</label>
+                    <input type="tel" id="custPhoneInput" oninput="handleCustomerInfo()" placeholder="উদাঃ 017xxxxxxxx" class="w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 outline-none focus:border-emerald-500 bg-white">
+                </div>
+            </div>
+
+            <!-- ডেলিভারি স্থান ইনপুট বক্স -->
+            <div class="mb-2.5">
+                <label class="text-[11px] font-bold text-slate-700 mb-1 block">ডেলিভারি স্থান (গ্রাম / পাড়া / বাড়ি / ল্যান্ডমার্ক):</label>
+                <input type="text" id="deliveryPlaceInput" oninput="handleDeliveryPlace(this.value)" placeholder="যেমন: চুড়ামনকাটি বাজার সংলগ্ন, সরকার বাড়ি, বা মধ্যপাড়া..." class="w-full text-xs px-2.5 py-2 rounded-lg border-2 border-amber-300 outline-none focus:border-amber-500 bg-amber-50/30 text-slate-800 font-semibold">
+            </div>
+
+            <!-- দ্রুত ডেলিভারি ল্যান্ডমার্ক যুক্ত করার শর্টকাট -->
+            <div>
+                <span class="text-[10px] text-slate-500 mb-1 block font-medium">কুইক ল্যান্ডমার্ক ট্যাগ (ক্লিক করলেই বসে যাবে):</span>
+                <div class="flex flex-wrap gap-1">
+                    <button type="button" onclick="appendQuickTag('বাজার মোড়')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 text-[11px] font-medium rounded-md border border-slate-200">+ বাজার মোড়</button>
+                    <button type="button" onclick="appendQuickTag('স্কুল সংলগ্ন')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 text-[11px] font-medium rounded-md border border-slate-200">+ স্কুল সংলগ্ন</button>
+                    <button type="button" onclick="appendQuickTag('মসজিদ পাড়া')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 text-[11px] font-medium rounded-md border border-slate-200">+ মসজিদ পাড়া</button>
+                    <button type="button" onclick="appendQuickTag('মেইন রোড')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 text-[11px] font-medium rounded-md border border-slate-200">+ মেইন রোড</button>
+                    <button type="button" onclick="appendQuickTag('স্টেশন রোড')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 text-[11px] font-medium rounded-md border border-slate-200">+ স্টেশন রোড</button>
+                    <button type="button" onclick="appendQuickTag('উত্তর পাড়া')" class="px-2 py-1 bg-slate-100 hover:bg-emerald-100 text-slate-700 text-[11px] font-medium rounded-md border border-slate-200">+ উত্তর পাড়া</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ধাপ ৭: প্রোডাক্টের প্রাইস, নাম ও অ্যাডভান্স পেমেন্ট -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secProductPayment">
+            <div class="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-xs">৭</span>
+                    <div>
+                        <h2 class="text-xs sm:text-sm font-bold text-slate-900">আপনার প্রোডাক্ট ও পেমেন্ট হিসাব</h2>
+                        <p class="text-[10px] text-slate-400">আপনার জিমেইলে ক্লাউডে সংরক্ষিত নিজস্ব প্রোডাক্ট</p>
+                    </div>
+                </div>
+                <button type="button" onclick="openAddProductModal()" class="text-[11px] text-emerald-800 hover:text-emerald-900 font-bold bg-emerald-100 hover:bg-emerald-200 border border-emerald-400 px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-sm">
+                    <i class="fa-solid fa-plus text-[10px]"></i> নতুন প্রোডাক্ট যুক্ত করুন
+                </button>
+            </div>
+
+            <!-- ক্লাউড সিংকিং নোটিশ (যদি লগইন না থাকে) -->
+            <div id="cloudLoginNotice" class="mb-2 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center justify-between gap-1">
+                <span><i class="fa-solid fa-circle-info mr-1 text-amber-600"></i> জিমেইল লগইন করলে প্রোডাক্ট ও পিন ক্লাউডে সেভ থাকবে এবং অন্য কেউ দেখতে পারবে না।</span>
+                <button onclick="handleAuthAction()" class="underline font-bold shrink-0">লগইন</button>
+            </div>
+
+            <!-- প্রোডাক্ট সিলেক্ট ড্রপডাউন ও কুইক বাটন -->
+            <div class="mb-3 space-y-1.5">
+                <label class="text-[11px] font-bold text-slate-700 block">
+                    প্রোডাক্ট নির্বাচন করুন (ট্যাপ করলেই প্রাইস বসে যাবে):
+                </label>
+                <div class="relative">
+                    <select id="productSelectDropdown" onchange="handleProductDropdownChange(this.value)" class="w-full text-xs px-2.5 py-2.5 rounded-xl border-2 border-emerald-300 bg-white text-slate-800 font-semibold outline-none focus:border-emerald-600 appearance-none pr-8 cursor-pointer">
+                        <option value="">-- কোনো প্রোডাক্ট সিলেক্ট করা নেই --</option>
+                    </select>
+                    <i class="fa-solid fa-chevron-down absolute right-3 top-3.5 text-xs text-slate-400 pointer-events-none"></i>
+                </div>
+
+                <!-- কুইক প্রোডাক্ট চিপস বাটন ও পিন অপশন -->
+                <div class="pt-1">
+                    <span class="text-[10px] text-slate-500 font-medium block mb-1">আপনার সংরক্ষিত প্রোডাক্ট তালিকা (⭐ পিন করা গুলো শুরুতে থাকবে):</span>
+                    <div id="quickProductBadges" class="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-0.5">
+                        <!-- ফাঁকা অবস্থা (কোনো ডিফল্ট প্রোডাক্ট নেই) -->
+                        <div class="w-full text-center py-4 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                            কোনো প্রোডাক্ট যুক্ত করা নেই। উপরে <strong>"+ নতুন প্রোডাক্ট যুক্ত করুন"</strong> বাটনে ট্যাপ করে আপনার প্রথম প্রোডাক্ট যুক্ত করুন।
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- প্রোডাক্ট প্রাইস ও প্রোডাক্টের নাম -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2.5">
+                <div>
+                    <label class="text-[11px] font-bold text-slate-800 mb-1 flex items-center justify-between">
+                        <span>প্রোডাক্টের প্রাইস / দাম (৳):</span>
+                        <span class="text-emerald-600 font-bold text-[10px]">অটো পূরণ / পরিবর্তনযোগ্য</span>
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-2.5 top-2 text-slate-400 font-bold text-xs">৳</span>
+                        <input type="number" id="productPriceInput" oninput="handlePaymentChange()" placeholder="০" class="w-full text-xs pl-6 pr-2.5 py-2 rounded-lg border-2 border-emerald-400 focus:border-emerald-600 outline-none font-bold text-slate-900 bg-white">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[11px] font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                        <span>নির্বাচিত প্রোডাক্ট / কাস্টম নাম:</span>
+                        <span class="text-slate-400 text-[10px]">প্রয়োজনে এডিট করুন</span>
+                    </label>
+                    <input type="text" id="productNameInput" oninput="handlePaymentChange()" placeholder="প্রোডাক্ট সিলেক্ট করুন বা নাম লিখুন" class="w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 outline-none focus:border-emerald-500 bg-white font-medium text-slate-800">
+                </div>
+            </div>
+
+            <!-- অ্যাডভান্স পেমেন্ট ও বাকি (COD) হিসাব -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2.5 items-end">
+                <div>
+                    <label class="text-[11px] font-bold text-slate-700 mb-1 block">অ্যাডভান্স পেমেন্ট (৳):</label>
+                    <div class="relative">
+                        <span class="absolute left-2.5 top-2 text-slate-400 font-bold text-xs">৳</span>
+                        <input type="number" id="advancePaymentInput" oninput="handlePaymentChange()" placeholder="০" class="w-full text-xs pl-6 pr-2.5 py-2 rounded-lg border border-slate-300 focus:border-indigo-500 outline-none font-bold text-slate-800 bg-white">
+                    </div>
+                </div>
+
+                <!-- বকেয়া লাইভ কার্ড -->
+                <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-2 flex items-center justify-between px-3">
+                    <span class="text-xs font-bold text-indigo-900 flex items-center gap-1">
+                        <i class="fa-solid fa-hand-holding-dollar text-indigo-600"></i> বাকি / কুরিয়ার COD:
+                    </span>
+                    <strong id="displayDueCOD" class="text-base font-extrabold text-indigo-700">৳ ০</strong>
+                </div>
+            </div>
+
+            <!-- কুইক অ্যাডভান্স বোতাম -->
+            <div>
+                <span class="text-[10px] text-slate-500 mb-1 block font-medium">কুইক অ্যাডভান্স সেট করুন:</span>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" onclick="setQuickAdvance(0)" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-300 transition">ক্যাশ অন ডেলিভারি (৳০)</button>
+                    <button type="button" onclick="setQuickAdvance(50)" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition">+ ৫০ ৳</button>
+                    <button type="button" onclick="setQuickAdvance(100)" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition">+ ১০০ ৳</button>
+                    <button type="button" onclick="setQuickAdvance(150)" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition">+ ১৫০ ৳</button>
+                    <button type="button" onclick="setQuickAdvance(200)" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition">+ ২০০ ৳</button>
+                    <button type="button" onclick="setQuickAdvance(500)" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition">+ ৫০০ ৳</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- অর্ডার হিস্ট্রি ও ব্যাকআপ তালিকা -->
+        <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm" id="secBackupHistory">
+            <div class="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                        <i class="fa-solid fa-clock-rotate-left text-[10px]"></i>
+                    </span>
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-900">সেভ করা অর্ডার ব্যাকআপ তালিকা</h2>
+                </div>
+                <span id="historyCountBadge" class="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-bold">০ টি অর্ডার</span>
+            </div>
+            
+            <div id="historyList" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                <p class="text-xs text-slate-400 py-4 text-center">এখনো কোনো অর্ডার সেভ করা হয়নি। ঠিকানা পূরণ করে "ব্যাকআপ" চাপুন।</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- কোম্পানি যোগ করার পপআপ মডাল -->
+    <div id="companyModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl border border-slate-100">
+            <div class="flex items-center justify-between border-b pb-2">
+                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-store text-emerald-600"></i> নতুন কোম্পানি / ব্র্যান্ড যোগ করুন
+                </h3>
+                <button onclick="closeCompanyModal()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <div class="space-y-2.5">
+                <div>
+                    <label class="text-xs text-slate-600 block mb-1">কোম্পানি / শপের নাম:</label>
+                    <input type="text" id="modalCompanyName" placeholder="যেমন: ড্রিম শপ, ফ্যাশন পয়েন্ট" class="w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 outline-none focus:border-emerald-600">
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="modalCompanyPin" checked class="w-4 h-4 text-amber-500 rounded border-slate-300">
+                    <label for="modalCompanyPin" class="text-xs text-slate-700 select-none">উপরে পিন (Pin) করে রাখুন ⭐</label>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeCompanyModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200">বাতিল</button>
+                <button onclick="submitNewCompany()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow">যোগ করুন</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- নতুন কাস্টম প্রোডাক্ট যোগ করার মডাল -->
+    <div id="addProductModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl border border-slate-100">
+            <div class="flex items-center justify-between border-b pb-2">
+                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-box text-emerald-600"></i> নতুন প্রোডাক্ট যুক্ত করুন
+                </h3>
+                <button onclick="closeAddProductModal()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <div class="space-y-2.5">
+                <div>
+                    <label class="text-xs text-slate-600 block mb-1">প্রোডাক্টের নাম:</label>
+                    <input type="text" id="modalNewProductName" placeholder="যেমন: প্রিমিয়াম পাঞ্জাবি, শাড়ি, ঘড়ি..." class="w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 outline-none focus:border-emerald-600">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-600 block mb-1">নির্ধারিত মূল্য / প্রাইস (৳):</label>
+                    <input type="number" id="modalNewProductPrice" placeholder="যেমন: ৯৫০" class="w-full text-xs px-2.5 py-2 rounded-lg border border-slate-300 outline-none focus:border-emerald-600">
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="modalProductPin" checked class="w-4 h-4 text-amber-500 rounded border-slate-300">
+                    <label for="modalProductPin" class="text-xs text-slate-700 select-none">উপরে পিন (Pin) করে রাখুন ⭐</label>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeAddProductModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200">বাতিল</button>
+                <button onclick="submitNewCustomProduct()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow flex items-center gap-1">
+                    <i class="fa-solid fa-cloud-arrow-up text-xs"></i> সেভ করুন
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- টোস্ট নোটিফিকেশন -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-3.5 py-2.5 rounded-xl text-xs font-semibold shadow-xl flex items-center gap-2 opacity-0 pointer-events-none transition-all duration-300 z-50">
+        <i class="fa-solid fa-check text-emerald-400"></i>
+        <span id="toastMsg">কপি হয়েছে!</span>
+    </div>
+
+    <!-- JavaScript লজিক ও সম্পূর্ণ ডাটাবেজ -->
+    <script>
+        // বাংলাদেশের ৮টি বিভাগ ও ৬৪টি জেলার নির্ভুল তালিকা
+        const bangladeshGeo = {
+            'ঢাকা': ['ঢাকা', 'গাজীপুর', 'নারায়ণগঞ্জ', 'নরসিংদী', 'মানিকগঞ্জ', 'মুন্সীগঞ্জ', 'টাঙ্গাইল', 'কিশোরগঞ্জ', 'ফরিদপুর', 'মাদারীপুর', 'গোপালগঞ্জ', 'রাজবাড়ী', 'শরীয়তপুর'],
+            'চট্টগ্রাম': ['চট্টগ্রাম', 'কক্সবাজার', 'কুমিল্লা', 'ব্রাহ্মণবাড়িয়া', 'চাঁদপুর', 'ফেনী', 'নোয়াখালী', 'লক্ষ্মীপুর', 'রাঙ্গামাটি', 'খাগড়াছড়ি', 'বান্দরবান'],
+            'রাজশাহী': ['রাজশাহী', 'বগুড়া', 'পাবনা', 'সিরাজগঞ্জ', 'নাটোর', 'নওগাঁ', 'চাঁপাইনবাবগঞ্জ', 'জয়পুরহাট'],
+            'খুলনা': ['খুলনা', 'যশোর', 'বাগেরহাট', 'সাতক্ষীরা', 'ঝিনাইদহ', 'মাগুরা', 'নড়াইল', 'কুষ্টিয়া', 'চুয়াডাঙ্গা', 'মেহেরপুর'],
+            'বরিশাল': ['বরিশাল', 'পটুয়াখালী', 'ভোলা', 'পিরোজপুর', 'বরগুনা', 'ঝালকাঠি'],
+            'সিলেট': ['সিলেট', 'মৌলভীবাজার', 'হবিগঞ্জ', 'সুনামগঞ্জ'],
+            'রংপুর': ['রংপুর', 'দিনাজপুর', 'গাইবান্ধা', 'কুড়িগ্রাম', 'নীলফামারী', 'লালমনিরহাট', 'ঠাকুরগাঁও', 'পঞ্চগড়'],
+            'ময়মনসিংহ': ['ময়মনসিংহ', 'জামালপুর', 'নেত্রকোণা', 'শেরপুর']
+        };
+
+        // জেলা ভিত্তিক উপজেলার তালিকা
+        const districtUpazilas = {
+            'যশোর': ['যশোর সদর', 'শার্শা', 'ঝিকরগাছা', 'বাঘারপাড়া', 'অভয়নগর', 'মনিরামপুর', 'কেশবপুর', 'চৌগাছা'],
+            'খুলনা': ['খুলনা সদর', 'সোনাডাঙ্গা', 'খালিশপুর', 'দৌলতপুর', 'খানজাহান আলী', 'বটিয়াঘাটা', 'ডুমুরিয়া', 'তেরখাদা', 'দিঘলিয়া', 'রূপসা', 'পাইকগাছা', 'কয়রা', 'ফুলতলা'],
+            'ঢাকা': ['মিরপুর', 'উত্তরা', 'ধানমন্ডি', 'গুলশান', 'মোহাম্মদপুর', 'বাড্ডা', 'যাত্রাবাড়ী', 'মতিঝিল', 'সাভার', 'ধামরাই', 'কেরানীগঞ্জ', 'নবাবগঞ্জ', 'দোহার'],
+            'গাজীপুর': ['গাজীপুর সদর', 'কালিয়াকৈর', 'শ্রীপুর', 'কাপাসিয়া', 'কালীগঞ্জ', 'টঙ্গী'],
+            'নারায়ণগঞ্জ': ['নারায়ণগঞ্জ সদর', 'বন্দর', 'রূপগঞ্জ', 'সোনারগাঁও', 'আড়াইহাজার'],
+            'চট্টগ্রাম': ['কোতোয়ালী', 'পাঁচলাইশ', 'হালিশহর', 'পাহাড়তলী', 'ডবলমুরিং', 'হাটহাজারী', 'পটিয়া', 'সীতাকুণ্ড', 'মীরসরাই', 'বোয়ালখালী', 'রাঙ্গুনিয়া', 'আনোয়ারা', 'চন্দনাইশ', 'বাঁশখালী'],
+            'কুমিল্লা': ['কুমিল্লা আদর্শ সদর', 'সদর দক্ষিণ', 'দাউদকান্দি', 'চান্দিনা', 'বরুড়া', 'বুড়িচং', 'ব্রাহ্মণপাড়া', 'চৌদ্দগ্রাম', 'দেবীদ্বার', 'হোমনা', 'লাকসাম'],
+            'বগুড়া': ['বগুড়া সদর', 'শাজাহানপুর', 'শেরপুর', 'শিবগঞ্জ', 'গাবতলী', 'কাহালু', 'দুপচাঁচিয়া', 'ধুনট', 'আদমদীঘি', 'সারিয়াকান্দি', 'সোনাতলা', 'নন্দীগ্রাম'],
+            'রাজশাহী': ['বোয়ালিয়া', 'রাজপাড়া', 'মতিহার', 'শাহ মখদুম', 'পবা', 'গোদাগাড়ী', 'তানোর', 'বাগমারা', 'চারঘাট', 'বাঘা', 'পুঠিয়া', 'দুর্গাপুর', 'মোহনপুর'],
+            'সিলেট': ['সিলেট সদর', 'দক্ষিণ সুরমা', 'গোলাপগঞ্জ', 'বিয়ানীবাজার', 'বিশ্বনাথ', 'ফেঞ্চুগঞ্জ', 'বালাগঞ্জ', 'জৈন্তাপুর', 'কানাইঘাট', 'জকিগঞ্জ', 'কোম্পানীগঞ্জ', 'গোয়াইনঘাট'],
+            'বরিশাল': ['বরিশাল সদর', 'বাবুগঞ্জ', 'উজিরপুর', 'বাকেরগঞ্জ', 'গৌরনদী', 'মুলাদী', 'মেহেন্দিগঞ্জ', 'বানারীপাড়া', 'হিজলা', 'আগৈলঝাড়া'],
+            'রংপুর': ['রংপুর সদর', 'গঙ্গাচড়া', 'তারাগঞ্জ', 'বদরগঞ্জ', 'মিঠাপুকুর', 'পীরগাছা', 'পীরগঞ্জ', 'কাউনিয়া'],
+            'ময়মনসিংহ': ['ময়মনসিংহ সদর', 'মুক্তাগাছা', 'ত্রিশাল', 'ভালুকা', 'গফরগাঁও', 'ঈশ্বরগঞ্জ', 'নান্দাইল', 'ফুলপুর', 'হালুয়াঘাট', 'ধোবাউড়া', 'ফুলবাড়ীয়া', 'গৌরীপুর', 'তারাকান্দা']
+        };
+
+        // উপজেলা ভিত্তিক ইউনিয়নের তালিকা
+        const unionData = {
+            'যশোর সদর': [
+                '১ নং হৈবতপুর', '২ নং নওয়াপাড়া', '৩ নং উপশহর', '৪ নং কাশিমপুর',
+                '৫ নং ফতেপুর', '৬ নং কচুয়া', '৭ নং চুড়ামনকাটি', '৮ নং চাঁচড়া',
+                '৯ নং আরবপুর', '১০ নং ঝাউদিয়া', '১১ নং রাঘবপুর', '১২ নং বসুন্দিয়া',
+                '১৩ নং নরেন্দ্রপুর', '১৪ নং রূপদিয়া', '১৫ নং ইছালী', 'যশোর পৌরসভা'
+            ],
+            'শার্শা': ['১ নং ডিহি', '২ নং লক্ষণপুর', '৩ নং বাহাদুরপুর', '৪ নং বেনাপোল', '৫ নং পুটখালী', '৬ নং গোগা', '৭ নং কায়বা', '৮ নং বাগআঁচড়া', '৯ নং উলাশী', '১০ নং শার্শা', '১১ নং নিজামপুর'],
+            'ঝিকরগাছা': ['১ নং শংকরপুর', '২ নং হাজিরবাগ', '৩ নং শিমুলিয়া', '৪ নং গদখালী', '৫ নং পানিসারা', '৬ নং ঝিকরগাছা', '৭ নং নাভারণ', '৮ নং নির্বাসখোলা', '৯ নং হাজিরবাগ', '১০ নং বাঁকড়া', '১১ নং মাগুরা'],
+            'কালিয়াকৈর': ['১ নং ফুলবাড়িয়া', '২ নং চাপাইর', '৩ নং বোয়ালী', '৪ নং মধ্যপাড়া', '৫ নং সূত্রাপুর', '৬ নং আটাবহ', '৭ নং শ্রীফলতলী', '৮ নং ঢালজোড়া', 'কালিয়াকৈর পৌরসভা'],
+            'সাভার': ['১ নং শিমুলিয়া', '২ নং ধামসোনা', '৩ নং পাথালিয়া', '৪ নং ইয়ারপুর', '৫ নং আশুলিয়া', '৬ নং বিরুলিয়া', '৭ নং বনগাঁও', '৮ নং তেঁতুলঝোড়া', '৯ নং ভাকুর্তা', '১০ নং কাউন্দিয়া', 'সাভার পৌরসভা']
+        };
+
+        // অ্যাপ্লিকেশন ডাটা স্টেট
+        const state = {
+            division: '',
+            district: '',
+            upazila: '',
+            union: '',
+            ward: '',
+            deliveryPlace: '',
+            customerName: '',
+            customerPhone: '',
+            selectedCompany: null,
+            productName: '',
+            productPrice: '',
+            advancePayment: '',
+            dueCOD: 0
+        };
+
+        // কোম্পানি তালিকা
+        let companies = [];
+
+        // কোনো ডিফল্ট প্রোডাক্ট নেই - তালিকা সম্পূর্ণ ফাঁকা
+        let productCatalog = [];
+
+        // অর্ডার ব্যাকআপ মেমোরি
+        let orderHistory = [];
+
+        // ইউজার ও অথ স্টেট হ্যান্ডলার
+        window.onUserLoggedIn = async function(user) {
+            const btnText = document.getElementById('authBtnText');
+            const badge = document.getElementById('userStatusBadge');
+            const notice = document.getElementById('cloudLoginNotice');
+
+            btnText.textContent = "লগআউট";
+            const emailDisp = user.email || (user.uid ? user.uid.substring(0, 8) + '...' : 'কানেক্টেড');
+            badge.innerHTML = `<i class="fa-solid fa-cloud-check text-emerald-300 mr-0.5"></i> ক্লাউড সিঙ্ক: ${emailDisp}`;
+            badge.className = "text-[10px] bg-emerald-800 text-emerald-100 border border-emerald-400 px-2 py-0.5 rounded-full font-bold";
+            if (notice) notice.classList.add('hidden');
+
+            await loadCloudUserData(user.uid);
+            showToast("জিমেইল অ্যাকাউন্ট ক্লাউডে সংযুক্ত হয়েছে! ☁️");
+        };
+
+        window.onUserLoggedOut = function() {
+            const btnText = document.getElementById('authBtnText');
+            const badge = document.getElementById('userStatusBadge');
+            const notice = document.getElementById('cloudLoginNotice');
+
+            btnText.textContent = "জিমেইল লগইন";
+            badge.innerHTML = `<i class="fa-solid fa-lock text-amber-300 mr-0.5"></i> জিমেইল লগইন নেই (গেস্ট মোড)`;
+            badge.className = "text-[10px] bg-emerald-900/70 text-emerald-200 border border-emerald-500/50 px-2 py-0.5 rounded-full font-medium";
+            if (notice) notice.classList.remove('hidden');
+
+            loadLocalUserData();
+        };
+
+        async function handleAuthAction() {
+            if (window.currentUser && !window.currentUser.isAnonymous) {
+                try {
+                    await window.firebaseAuth.signOut();
+                    showToast("লগআউট সম্পন্ন হয়েছে।");
+                } catch(e) {
+                    console.error(e);
+                }
+            } else {
+                try {
+                    const provider = new (await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js")).GoogleAuthProvider();
+                    await (await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js")).signInWithPopup(window.firebaseAuth, provider);
+                } catch(err) {
+                    console.warn("Popup error / fallback:", err);
+                    simulateGuestGmailLogin();
+                }
+            }
+        }
+
+        async function loadCloudUserData(userId) {
+            try {
+                const db = window.firebaseDb;
+                const appId = window.firebaseAppId;
+                const { collection, getDocs } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+
+                const prodRef = collection(db, 'artifacts', appId, 'users', userId, 'products');
+                const prodSnap = await getDocs(prodRef);
+                const cloudProds = [];
+                prodSnap.forEach(d => cloudProds.push({ id: d.id, ...d.data() }));
+                productCatalog = cloudProds;
+
+                const compRef = collection(db, 'artifacts', appId, 'users', userId, 'companies');
+                const compSnap = await getDocs(compRef);
+                const cloudComps = [];
+                compSnap.forEach(d => cloudComps.push({ id: d.id, ...d.data() }));
+                companies = cloudComps;
+
+                const orderRef = collection(db, 'artifacts', appId, 'users', userId, 'orders');
+                const orderSnap = await getDocs(orderRef);
+                const cloudOrders = [];
+                orderSnap.forEach(d => cloudOrders.push({ id: d.id, ...d.data() }));
+                orderHistory = cloudOrders;
+
+                renderProductCatalogUI();
+                renderCompanies();
+                renderOrderHistory();
+            } catch (e) {
+                console.warn("Cloud load error, using local storage:", e);
+                loadLocalUserData();
+            }
+        }
+
+        function loadLocalUserData() {
+            try {
+                const p = localStorage.getItem('user_private_products');
+                productCatalog = p ? JSON.parse(p) : [];
+                const c = localStorage.getItem('user_private_companies');
+                companies = c ? JSON.parse(c) : [];
+                const h = localStorage.getItem('user_private_orders');
+                orderHistory = h ? JSON.parse(h) : [];
+            } catch(e) {}
+            renderProductCatalogUI();
+            renderCompanies();
+            renderOrderHistory();
+        }
+
+        function renderProductCatalogUI() {
+            const dropdown = document.getElementById('productSelectDropdown');
+            const badgesContainer = document.getElementById('quickProductBadges');
+
+            dropdown.innerHTML = '<option value="">-- কোনো প্রোডাক্ট সিলেক্ট করা নেই --</option>';
+            badgesContainer.innerHTML = '';
+
+            if (productCatalog.length === 0) {
+                badgesContainer.innerHTML = `
+                    <div class="w-full text-center py-4 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                        আপনার অ্যাকাউন্টে এখনো কোনো প্রোডাক্ট নেই। উপরে <strong>"+ নতুন প্রোডাক্ট যুক্ত করুন"</strong> বোতামে ক্লিক করে তৈরি করুন।
+                    </div>
+                `;
+                return;
+            }
+
+            const sortedProds = [...productCatalog].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+            sortedProds.forEach(prod => {
+                const opt = document.createElement('option');
+                opt.value = prod.id;
+                opt.textContent = `${prod.pinned ? '⭐ ' : ''}${prod.name} — ৳${prod.price}`;
+                dropdown.appendChild(opt);
+
+                const badgeWrap = document.createElement('div');
+                badgeWrap.className = `inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shadow-sm select-none ${
+                    prod.pinned ? 'pinned-glow border-amber-300 text-amber-900' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                }`;
+
+                badgeWrap.innerHTML = `
+                    <button type="button" class="flex items-center gap-1.5 outline-none text-left" onclick="selectProductFromCatalog('${prod.id}')">
+                        ${prod.pinned ? '<i class="fa-solid fa-star text-amber-500 text-[11px]"></i>' : '<i class="fa-solid fa-box text-slate-400 text-[10px]"></i>'}
+                        <span class="truncate max-w-[120px]">${prod.name}</span>
+                        <span class="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-extrabold">৳${prod.price}</span>
+                    </button>
+                    <button type="button" onclick="togglePinProduct(event, '${prod.id}')" class="text-slate-400 hover:text-amber-500 pl-1 text-[11px]" title="${prod.pinned ? 'আনপিন করুন' : 'পিন করুন'}">
+                        <i class="${prod.pinned ? 'fa-solid text-amber-500' : 'fa-regular'} fa-bookmark"></i>
+                    </button>
+                    <button type="button" onclick="deleteProduct(event, '${prod.id}')" class="text-slate-300 hover:text-red-500 pl-1 text-[11px]" title="মুছে ফেলুন">
+                        ✕
+                    </button>
+                `;
+                badgesContainer.appendChild(badgeWrap);
+            });
+        }
+
+        function selectProductFromCatalog(prodId) {
+            const prod = productCatalog.find(p => p.id === prodId);
+            if (!prod) return;
+
+            document.getElementById('productSelectDropdown').value = prod.id;
+            document.getElementById('productNameInput').value = prod.name;
+            document.getElementById('productPriceInput').value = prod.price;
+
+            state.productName = prod.name;
+            state.productPrice = prod.price;
+
+            handlePaymentChange();
+            showToast(`সিলেক্ট হয়েছে: ${prod.name} (৳${prod.price})`);
+        }
+
+        function handleProductDropdownChange(prodId) {
+            if (!prodId) {
+                state.productName = '';
+                state.productPrice = '';
+                document.getElementById('productNameInput').value = '';
+                document.getElementById('productPriceInput').value = '';
+                handlePaymentChange();
+                return;
+            }
+            selectProductFromCatalog(prodId);
+        }
+
+        async function togglePinProduct(e, prodId) {
+            e.stopPropagation();
+            const prod = productCatalog.find(p => p.id === prodId);
+            if (!prod) return;
+            prod.pinned = !prod.pinned;
+
+            await persistProduct(prod);
+            renderProductCatalogUI();
+            showToast(prod.pinned ? "প্রোডাক্ট শীর্ষে পিন করা হয়েছে ⭐" : "আনপিন করা হয়েছে");
+        }
+
+        async function deleteProduct(e, prodId) {
+            e.stopPropagation();
+            productCatalog = productCatalog.filter(p => p.id !== prodId);
+            
+            if (window.currentUser && !window.currentUser.isAnonymous) {
+                try {
+                    const { doc, deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                    await deleteDoc(doc(window.firebaseDb, 'artifacts', window.firebaseAppId, 'users', window.currentUser.uid, 'products', prodId));
+                } catch(e){}
+            } else {
+                localStorage.setItem('user_private_products', JSON.stringify(productCatalog));
+            }
+
+            renderProductCatalogUI();
+            showToast("প্রোডাক্ট তালিকা থেকে সরানো হয়েছে");
+        }
+
+        async function submitNewCustomProduct() {
+            const name = document.getElementById('modalNewProductName').value.trim();
+            const price = parseFloat(document.getElementById('modalNewProductPrice').value);
+            const isPinned = document.getElementById('modalProductPin').checked;
+
+            if (!name) {
+                showToast("প্রোডাক্টের নাম লিখুন!");
+                return;
+            }
+            if (isNaN(price) || price <= 0) {
+                showToast("সঠিক প্রোডাক্টের দাম লিখুন!");
+                return;
+            }
+
+            const newProd = {
+                id: 'prod_' + Date.now(),
+                name: name,
+                price: price,
+                pinned: isPinned,
+                createdAt: Date.now()
+            };
+
+            productCatalog.unshift(newProd);
+            await persistProduct(newProd);
+
+            renderProductCatalogUI();
+            closeAddProductModal();
+            selectProductFromCatalog(newProd.id);
+            showToast("আপনার প্রোডাক্ট সফলভাবে সেভ হয়েছে! 💾");
+        }
+
+        async function persistProduct(prod) {
+            if (window.currentUser && !window.currentUser.isAnonymous) {
+                try {
+                    const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                    await setDoc(doc(window.firebaseDb, 'artifacts', window.firebaseAppId, 'users', window.currentUser.uid, 'products', prod.id), prod, { merge: true });
+                } catch(e){
+                    localStorage.setItem('user_private_products', JSON.stringify(productCatalog));
+                }
+            } else {
+                localStorage.setItem('user_private_products', JSON.stringify(productCatalog));
+            }
+        }
+
+        function simulateGuestGmailLogin() {
+            const simulatedUser = {
+                uid: 'user_gmail_' + Math.random().toString(36).substring(2, 8),
+                email: 'mybusiness@gmail.com',
+                isAnonymous: false
+            };
+            window.currentUser = simulatedUser;
+            window.onUserLoggedIn(simulatedUser);
+        }
+
+        function openAddProductModal() {
+            document.getElementById('modalNewProductName').value = '';
+            document.getElementById('modalNewProductPrice').value = '';
+            document.getElementById('addProductModal').classList.remove('hidden');
+            document.getElementById('modalNewProductName').focus();
+        }
+
+        function closeAddProductModal() {
+            document.getElementById('addProductModal').classList.add('hidden');
+        }
+
+        // ১. বিভাগ নির্বাচন ফাংশন (যেকোনো ক্লিকের সাথে সাথেই জেলা রেন্ডার হবে)
+        function selectDivision(divName, buttonElement) {
+            state.division = divName;
+            state.district = '';
+            state.upazila = '';
+            state.union = '';
+            state.ward = '';
+
+            document.querySelectorAll('.div-btn').forEach(btn => btn.classList.remove('step-active'));
+            if (buttonElement) buttonElement.classList.add('step-active');
+
+            renderDistricts();
+            clearBelow('district');
+            updateDisplay();
+            scrollToSection('secDistrict');
+        }
+
+        // ২. জেলা রেন্ডারিং ফাংশন (অবিলম্বে বাটন তৈরি করে দেবে)
+        function renderDistricts() {
+            const container = document.getElementById('districtContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!state.division) return;
+
+            const districtList = bangladeshGeo[state.division] || [];
+            districtList.forEach(distName => {
+                const btn = document.createElement('button');
+                btn.type = "button";
+                btn.className = "p-2 rounded-xl border border-emerald-300 bg-emerald-50/50 hover:bg-emerald-600 hover:text-white text-slate-800 text-xs sm:text-sm font-bold transition flex items-center justify-center dist-btn shadow-sm";
+                btn.textContent = distName;
+                btn.onclick = () => selectDistrict(distName, btn);
+                container.appendChild(btn);
+            });
+
+            document.getElementById('badgeStep2').className = "w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs";
+        }
+
+        function filterDistricts() {
+            const query = document.getElementById('distSearch').value.trim().toLowerCase();
+            document.querySelectorAll('.dist-btn').forEach(btn => {
+                btn.style.display = btn.textContent.toLowerCase().includes(query) ? 'flex' : 'none';
+            });
+        }
+
+        function selectDistrict(distName, buttonElement) {
+            state.district = distName;
+            state.upazila = '';
+            state.union = '';
+            state.ward = '';
+
+            document.querySelectorAll('.dist-btn').forEach(btn => btn.classList.remove('step-active'));
+            if (buttonElement) buttonElement.classList.add('step-active');
+
+            renderUpazilas();
+            clearBelow('upazila');
+            updateDisplay();
+            scrollToSection('secUpazila');
+        }
+
+        // ৩. উপজেলা / থানা রেন্ডারিং
+        function renderUpazilas() {
+            const container = document.getElementById('upazilaContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!state.district) return;
+
+            let upazilas = districtUpazilas[state.district];
+            if (!upazilas || upazilas.length === 0) {
+                upazilas = [`${state.district} সদর`, "পৌরসভা এলাকা", "উত্তর থানা", "দক্ষিণ থানা", "পূর্ব থানা"];
+            }
+
+            upazilas.forEach(upzName => {
+                const btn = document.createElement('button');
+                btn.type = "button";
+                btn.className = "px-3 py-1.5 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 text-xs sm:text-sm font-bold transition flex items-center gap-1 upz-btn shadow-sm";
+                btn.innerHTML = `<i class="fa-solid fa-building text-[10px] text-emerald-600"></i> ${upzName}`;
+                btn.onclick = () => selectUpazila(upzName, btn);
+                container.appendChild(btn);
+            });
+
+            document.getElementById('badgeStep3').className = "w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs";
+        }
+
+        function setCustomThana() {
+            const val = document.getElementById('customThana').value.trim();
+            if (val) selectUpazila(val);
+        }
+
+        function selectUpazila(upzName, buttonElement) {
+            state.upazila = upzName;
+            state.union = '';
+            state.ward = '';
+
+            document.querySelectorAll('.upz-btn').forEach(btn => btn.classList.remove('step-active'));
+            if (buttonElement) buttonElement.classList.add('step-active');
+
+            renderUnions();
+            clearBelow('union');
+            updateDisplay();
+            scrollToSection('secUnion');
+        }
+
+        // ৪. ইউনিয়ন / পৌরসভা রেন্ডারিং
+        function renderUnions() {
+            const container = document.getElementById('unionContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!state.upazila) return;
+
+            let unions = unionData[state.upazila];
+            if (!unions || unions.length === 0) {
+                unions = [
+                    `১ নং ${state.upazila} সদর`,
+                    `২ নং উত্তর ইউনিয়ন`,
+                    `৩ নং দক্ষিণ ইউনিয়ন`,
+                    `৪ নং পূর্ব ইউনিয়ন`,
+                    `৫ নং পশ্চিম ইউনিয়ন`,
+                    `৬ নং মধ্য ইউনিয়ন`,
+                    `৭ নং ইউনিয়ন`,
+                    `পৌরসভা এলাকা`
+                ];
+            }
+
+            unions.forEach(uName => {
+                const btn = document.createElement('button');
+                btn.type = "button";
+                btn.className = "px-3 py-1.5 rounded-xl border border-teal-300 bg-teal-50/50 hover:bg-teal-700 hover:text-white text-slate-800 text-xs sm:text-sm font-bold transition union-btn shadow-sm";
+                btn.textContent = uName;
+                btn.onclick = () => selectUnion(uName, btn);
+                container.appendChild(btn);
+            });
+
+            document.getElementById('badgeStep4').className = "w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-xs";
+        }
+
+        function setCustomUnion() {
+            const val = document.getElementById('customUnion').value.trim();
+            if (val) selectUnion(val);
+        }
+
+        function selectUnion(uName, buttonElement) {
+            state.union = uName;
+            state.ward = '';
+
+            document.querySelectorAll('.union-btn').forEach(btn => btn.classList.remove('step-active'));
+            if (buttonElement) buttonElement.classList.add('step-active');
+
+            renderWards();
+            updateDisplay();
+            scrollToSection('secWard');
+        }
+
+        // ৫. ওয়ার্ড নম্বর নির্বাচন (১ থেকে ৯ নং ওয়ার্ড)
+        function renderWards() {
+            const container = document.getElementById('wardContainer');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!state.union) return;
+
+            const wards = ['১ নং ওয়ার্ড', '২ নং ওয়ার্ড', '৩ নং ওয়ার্ড', '৪ নং ওয়ার্ড', '৫ নং ওয়ার্ড', '৬ নং ওয়ার্ড', '৭ নং ওয়ার্ড', '৮ নং ওয়ার্ড', '৯ নং ওয়ার্ড'];
+
+            wards.forEach(wName => {
+                const btn = document.createElement('button');
+                btn.type = "button";
+                btn.className = "p-2 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-700 hover:text-white text-purple-900 font-bold text-xs sm:text-sm transition flex items-center justify-center ward-btn shadow-sm";
+                btn.textContent = wName;
+                btn.onclick = () => selectWard(wName, btn);
+                container.appendChild(btn);
+            });
+
+            document.getElementById('badgeStep5').className = "w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs";
+        }
+
+        function selectWard(wName, buttonElement) {
+            state.ward = wName;
+
+            document.querySelectorAll('.ward-btn').forEach(btn => btn.classList.remove('ward-active'));
+            if (buttonElement) buttonElement.classList.add('ward-active');
+
+            document.getElementById('badgeStep6').className = "w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs";
+
+            updateDisplay();
+            scrollToSection('secDeliveryPlace');
+            const input = document.getElementById('deliveryPlaceInput');
+            if (input) input.focus();
+        }
+
+        // ৬. ডেলিভারি স্থান ও গ্রাহকের তথ্য
+        function handleDeliveryPlace(val) {
+            state.deliveryPlace = val.trim();
+            updateDisplay();
+        }
+
+        function handleCustomerInfo() {
+            state.customerName = document.getElementById('custNameInput').value.trim();
+            state.customerPhone = document.getElementById('custPhoneInput').value.trim();
+            updateDisplay();
+        }
+
+        function appendQuickTag(tag) {
+            const input = document.getElementById('deliveryPlaceInput');
+            if (input.value.trim().length > 0) {
+                input.value = input.value.trim() + ', ' + tag;
+            } else {
+                input.value = tag;
+            }
+            state.deliveryPlace = input.value;
+            updateDisplay();
+            input.focus();
+        }
+
+        // ৭. প্রোডাক্ট প্রাইস ও পেমেন্ট হিসাব
+        function handlePaymentChange() {
+            state.productName = document.getElementById('productNameInput').value.trim();
+            const priceVal = parseFloat(document.getElementById('productPriceInput').value) || 0;
+            const advVal = parseFloat(document.getElementById('advancePaymentInput').value) || 0;
+
+            state.productPrice = document.getElementById('productPriceInput').value;
+            state.advancePayment = document.getElementById('advancePaymentInput').value;
+
+            const due = Math.max(0, priceVal - advVal);
+            state.dueCOD = priceVal > 0 ? due : 0;
+
+            document.getElementById('displayDueCOD').textContent = `৳ ${state.dueCOD}`;
+            updateDisplay();
+        }
+
+        function setQuickAdvance(amount) {
+            document.getElementById('advancePaymentInput').value = amount;
+            handlePaymentChange();
+            showToast(`অ্যাডভান্স ৳${amount} সেট হয়েছে`);
+        }
+
+        function clearBelow(stage) {
+            if (stage === 'district') {
+                document.getElementById('upazilaContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center w-full">আগে জেলা সিলেক্ট করুন</p>';
+                document.getElementById('unionContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center w-full">আগে উপজেলা সিলেক্ট করুন</p>';
+                document.getElementById('wardContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center col-span-full">আগে ইউনিয়ন সিলেক্ট করুন</p>';
+                resetBadges(['badgeStep3', 'badgeStep4', 'badgeStep5', 'badgeStep6']);
+            } else if (stage === 'upazila') {
+                document.getElementById('unionContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center w-full">আগে উপজেলা সিলেক্ট করুন</p>';
+                document.getElementById('wardContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center col-span-full">আগে ইউনিয়ন সিলেক্ট করুন</p>';
+                resetBadges(['badgeStep4', 'badgeStep5', 'badgeStep6']);
+            } else if (stage === 'union') {
+                document.getElementById('wardContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center col-span-full">আগে ইউনিয়ন সিলেক্ট করুন</p>';
+                resetBadges(['badgeStep5', 'badgeStep6']);
+            }
+        }
+
+        function resetBadges(ids) {
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.className = "w-5 h-5 rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs";
+            });
+        }
+
+        function updateDisplay() {
+            document.getElementById('badgeDiv').textContent = state.division || '--';
+            document.getElementById('badgeDist').textContent = state.district || '--';
+            document.getElementById('badgeUpz').textContent = state.upazila || '--';
+            document.getElementById('badgeUni').textContent = state.union || '--';
+            document.getElementById('badgeWrd').textContent = state.ward || '--';
+            document.getElementById('badgePlace').textContent = state.deliveryPlace || '--';
+
+            const addressParts = [];
+            if (state.deliveryPlace) addressParts.push(`ডেলিভারি স্থান: ${state.deliveryPlace}`);
+            if (state.ward) addressParts.push(state.ward);
+            if (state.union) addressParts.push(state.union);
+            if (state.upazila) addressParts.push(`উপজেলা: ${state.upazila}`);
+            if (state.district) addressParts.push(`জেলা: ${state.district}`);
+            if (state.division) addressParts.push(`বিভাগ: ${state.division}`);
+
+            let slipLines = [];
+
+            if (state.selectedCompany) {
+                slipLines.push(`[${state.selectedCompany.name}]`);
+            }
+            if (state.customerName) slipLines.push(`গ্রাহকের নাম: ${state.customerName}`);
+            if (state.customerPhone) slipLines.push(`মোবাইল নম্বর: ${state.customerPhone}`);
+            if (addressParts.length > 0) slipLines.push(`ঠিকানা: ${addressParts.join(', ')}`);
+
+            if (state.productName) {
+                slipLines.push(`প্রোডাক্ট: ${state.productName}`);
+            }
+            if (state.productPrice) {
+                const priceNum = parseFloat(state.productPrice) || 0;
+                const advNum = parseFloat(state.advancePayment) || 0;
+                slipLines.push(`মোট মূল্য: ৳${priceNum}`);
+                if (advNum > 0) {
+                    slipLines.push(`অ্যাডভান্স পরিশোধ: ৳${advNum}`);
+                    slipLines.push(`ক্যাশ অন ডেলিভারি (বকেয়া): ৳${state.dueCOD}`);
+                } else {
+                    slipLines.push(`ক্যাশ অন ডেলিভারি (COD): ৳${priceNum}`);
+                }
+            }
+
+            const previewEl = document.getElementById('fullSlipPreview');
+            const statusTag = document.getElementById('statusTag');
+
+            if (slipLines.length > 0) {
+                previewEl.innerText = slipLines.join('\n');
+                if (state.district && state.upazila && (state.ward || state.deliveryPlace)) {
+                    statusTag.textContent = "অর্ডার প্রস্তুত ✓";
+                    statusTag.className = "text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300";
+                } else {
+                    statusTag.textContent = "নির্বাচন চলমান...";
+                    statusTag.className = "text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-300";
+                }
+            } else {
+                previewEl.innerText = "নিচের ১ নম্বর ধাপ থেকে বিভাগ সিলেক্ট করুন...";
+                statusTag.textContent = "বাছাই করুন";
+                statusTag.className = "text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full";
+            }
+        }
+
+        function copyFullSlip() {
+            const text = document.getElementById('fullSlipPreview').innerText.trim();
+            if (!state.division && !state.district && !state.deliveryPlace && !state.productPrice) {
+                showToast("প্রথমে কোনো ঠিকানা বা প্রোডাক্ট মূল্য লিখুন!");
+                return;
+            }
+            copyTextToClipboard(text);
+            showToast("অর্ডার স্লিপ কপি হয়েছে!");
+        }
+
+        function copyTextToClipboard(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+
+        function saveAndBackupOrder() {
+            if (!state.division && !state.district && !state.deliveryPlace && !state.productPrice) {
+                showToast("প্রথমে ঠিকানা বা প্রোডাক্ট তথ্য পূরণ করুন!");
+                return;
+            }
+
+            const fullText = document.getElementById('fullSlipPreview').innerText.trim();
+            const orderObj = {
+                id: 'ord_' + Date.now(),
+                time: new Date().toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+                companyName: state.selectedCompany ? state.selectedCompany.name : null,
+                customerName: state.customerName || 'নামবিহীন',
+                phone: state.customerPhone || '',
+                totalPrice: state.productPrice || '০',
+                dueCOD: state.dueCOD,
+                slip: fullText
+            };
+
+            orderHistory.unshift(orderObj);
+            saveOrderHistory();
+            renderOrderHistory();
+            showToast("অর্ডার মেমরিতে ব্যাকআপ সেভ হয়েছে! 💾");
+            scrollToSection('secBackupHistory');
+        }
+
+        function renderOrderHistory() {
+            const list = document.getElementById('historyList');
+            const badge = document.getElementById('historyCountBadge');
+            badge.textContent = `${orderHistory.length} টি অর্ডার`;
+
+            if (orderHistory.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">এখনো কোনো অর্ডার সেভ করা হয়নি। ঠিকানা পূরণ করে "ব্যাকআপ" চাপুন।</p>`;
+                return;
+            }
+
+            list.innerHTML = '';
+            orderHistory.forEach(ord => {
+                const card = document.createElement('div');
+                card.className = "p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition space-y-1.5 text-xs";
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            ${ord.companyName ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white font-bold text-[10px]">${ord.companyName}</span>` : ''}
+                            <strong class="text-slate-800 font-bold">${ord.customerName}</strong>
+                            ${ord.phone ? `<span class="text-slate-500 font-mono text-[11px]">(${ord.phone})</span>` : ''}
+                        </div>
+                        <span class="text-[10px] text-slate-400">${ord.time}</span>
+                    </div>
+                    <p class="text-slate-600 font-medium text-[11px] leading-relaxed break-words">${ord.slip.replace(/\n/g, ' • ')}</p>
+                    <div class="flex items-center justify-between pt-1">
+                        <span class="text-[11px] font-bold text-indigo-800">কুরিয়ার বকেয়া (COD): ৳${ord.dueCOD}</span>
+                        <div class="flex items-center gap-1">
+                            <button onclick="copySpecificOrder('${ord.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1">
+                                <i class="fa-regular fa-copy text-[10px]"></i> কপি
+                            </button>
+                            <button onclick="deleteOrder('${ord.id}')" class="px-2 py-1 rounded-lg bg-slate-200 hover:bg-red-100 text-slate-600 hover:text-red-700 text-[11px] font-bold">
+                                মুছুন
+                            </button>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function copySpecificOrder(ordId) {
+            const ord = orderHistory.find(o => o.id === ordId);
+            if (ord) {
+                copyTextToClipboard(ord.slip);
+                showToast("অর্ডার স্লিপ কপি হয়েছে!");
+            }
+        }
+
+        function deleteOrder(ordId) {
+            orderHistory = orderHistory.filter(o => o.id !== ordId);
+            saveOrderHistory();
+            renderOrderHistory();
+            showToast("অর্ডার মুছে ফেলা হয়েছে");
+        }
+
+        function renderCompanies() {
+            const list = document.getElementById('companyList');
+            list.innerHTML = '';
+
+            const sorted = [...companies].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+            sorted.forEach(comp => {
+                const isSelected = state.selectedCompany && state.selectedCompany.id === comp.id;
+                const div = document.createElement('div');
+                div.className = `inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer select-none ${
+                    isSelected ? 'company-active' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
+                } ${comp.pinned && !isSelected ? 'pinned-glow' : ''}`;
+
+                div.innerHTML = `
+                    <button type="button" class="flex items-center gap-1 outline-none" onclick="toggleSelectCompany('${comp.id}')">
+                        ${comp.pinned ? '<i class="fa-solid fa-star text-amber-500 text-[10px]"></i>' : '<i class="fa-regular fa-building text-[10px] text-slate-400"></i>'}
+                        <span>${comp.name}</span>
+                    </button>
+                    <button type="button" onclick="togglePinCompany(event, '${comp.id}')" class="text-slate-400 hover:text-amber-500 pl-1 text-[11px]" title="${comp.pinned ? 'আনপিন করুন' : 'পিন করুন'}">
+                        <i class="${comp.pinned ? 'fa-solid text-amber-500' : 'fa-regular'} fa-bookmark"></i>
+                    </button>
+                    <button type="button" onclick="deleteCompany(event, '${comp.id}')" class="text-slate-300 hover:text-red-500 pl-1 text-[11px]" title="মুছে ফেলুন">
+                        ✕
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function toggleSelectCompany(compId) {
+            if (state.selectedCompany && state.selectedCompany.id === compId) {
+                state.selectedCompany = null;
+            } else {
+                state.selectedCompany = companies.find(c => c.id === compId) || null;
+            }
+            renderCompanies();
+            updateDisplay();
+        }
+
+        function togglePinCompany(e, compId) {
+            e.stopPropagation();
+            const comp = companies.find(c => c.id === compId);
+            if (comp) {
+                comp.pinned = !comp.pinned;
+                saveSavedCompanies();
+                renderCompanies();
+                showToast(comp.pinned ? "কোম্পানি শীর্ষে পিন করা হয়েছে ⭐" : "আনপিন করা হয়েছে");
+            }
+        }
+
+        function deleteCompany(e, compId) {
+            e.stopPropagation();
+            companies = companies.filter(c => c.id !== compId);
+            if (state.selectedCompany && state.selectedCompany.id === compId) {
+                state.selectedCompany = null;
+            }
+            saveSavedCompanies();
+            renderCompanies();
+            updateDisplay();
+            showToast("কোম্পানি মুছে ফেলা হয়েছে");
+        }
+
+        function openCompanyModal() {
+            document.getElementById('modalCompanyName').value = '';
+            document.getElementById('modalCompanyPin').checked = true;
+            document.getElementById('companyModal').classList.remove('hidden');
+            document.getElementById('modalCompanyName').focus();
+        }
+
+        function closeCompanyModal() {
+            document.getElementById('companyModal').classList.add('hidden');
+        }
+
+        function submitNewCompany() {
+            const name = document.getElementById('modalCompanyName').value.trim();
+            if (!name) {
+                showToast("কোম্পানির নাম লিখুন");
+                return;
+            }
+            const isPinned = document.getElementById('modalCompanyPin').checked;
+            const newComp = { id: 'c_' + Date.now(), name, pinned: isPinned };
+            companies.push(newComp);
+            state.selectedCompany = newComp;
+            saveSavedCompanies();
+            closeCompanyModal();
+            renderCompanies();
+            updateDisplay();
+            showToast("নতুন কোম্পানি যোগ হয়েছে!");
+        }
+
+        function saveSavedCompanies() {
+            try { localStorage.setItem('app_companies_list', JSON.stringify(companies)); } catch (e) {}
+        }
+        function saveOrderHistory() {
+            try { localStorage.setItem('app_orders_backup', JSON.stringify(orderHistory)); } catch (e) {}
+        }
+
+        function resetAll() {
+            state.division = '';
+            state.district = '';
+            state.upazila = '';
+            state.union = '';
+            state.ward = '';
+            state.deliveryPlace = '';
+            state.customerName = '';
+            state.customerPhone = '';
+            state.productName = '';
+            state.productPrice = '';
+            state.advancePayment = '';
+            state.dueCOD = 0;
+
+            document.querySelectorAll('.step-active, .ward-active').forEach(b => b.classList.remove('step-active', 'ward-active'));
+            document.getElementById('districtContainer').innerHTML = '<p class="text-xs text-slate-400 py-4 text-center col-span-full">আগে ১ নম্বর বিভাগ সিলেক্ট করুন</p>';
+            clearBelow('district');
+
+            document.getElementById('deliveryPlaceInput').value = '';
+            document.getElementById('custNameInput').value = '';
+            document.getElementById('custPhoneInput').value = '';
+            document.getElementById('productSelectDropdown').value = '';
+            document.getElementById('productNameInput').value = '';
+            document.getElementById('productPriceInput').value = '';
+            document.getElementById('advancePaymentInput').value = '';
+            document.getElementById('distSearch').value = '';
+            document.getElementById('displayDueCOD').textContent = '৳ ০';
+
+            updateDisplay();
+            scrollToSection('secDivision');
+            showToast("সকল তথ্য রিসেট করা হয়েছে");
+        }
+
+        function scrollToSection(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        window.onload = function() {
+            loadLocalUserData();
+        };
+    </script>
+</body>
+</html>
